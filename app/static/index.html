@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CCTV Security Auditor X</title>
+<style>
+:root{--bg:#080e14;--panel:#111c25;--line:#233c47;--text:#e9f3f5;--muted:#91a9b0;--green:#39e6ad;--cyan:#53c9e8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Arial}
+header{padding:22px 5%;background:#0e1921;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px}
+h1{font-size:20px;color:var(--green);margin:0}header small,.muted{color:var(--muted)}
+main{max-width:1200px;margin:auto;padding:24px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.panel,.stat{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:18px;margin-bottom:16px}
+.stat b{display:block;font-size:27px;color:var(--green);margin-top:8px}
+input{width:100%;padding:13px;background:#081219;color:white;border:1px solid #31515c;border-radius:8px;margin:10px 0}
+button{padding:12px 19px;border:0;border-radius:8px;background:var(--green);color:#052018;font-weight:700;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.device{padding:14px 0;border-bottom:1px solid var(--line)}
+.tag{display:inline-block;padding:4px 8px;border-radius:6px;background:#173a38;color:var(--green);font-size:12px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#b9d4d9;background:#081219;padding:12px;border-radius:8px}
+table{width:100%;border-collapse:collapse}td,th{text-align:right;padding:10px;border-bottom:1px solid var(--line)}
+.progress{height:8px;background:#20313b;border-radius:9px;overflow:hidden;margin:12px 0}
+.progress span{display:block;height:100%;width:0;background:var(--green);transition:width .2s}
+a{color:var(--cyan)}@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}main{padding:14px}}
+@media(max-width:450px){.grid{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header><div><h1>CCTV SECURITY AUDITOR X</h1><small>منصة تدقيق أمني لأجهزة CCTV و DVR/NVR</small></div><span class="tag">LOCAL AGENT ONLINE</span></header>
+<main>
+<div class="grid">
+ <div class="stat">الأجهزة المكتشفة<b id="count">0</b></div>
+ <div class="stat">محولات الشبكة<b id="adapterCount">0</b></div>
+ <div class="stat">تقدم الفحص<b id="progressText">0%</b></div>
+ <div class="stat">الحالة<b id="statusText" style="font-size:17px">جاهز</b></div>
+</div>
+<section class="panel">
+<h3>اكتشاف الأجهزة وفحص الخدمات</h3>
+<p class="muted">أدخل نطاق IPv4 خاصاً تملكه أو لديك تصريح بفحصه. الحد الأقصى /24.</p>
+<div class="row"><input id="network" value="192.168.1.0/24" aria-label="CIDR network"><button id="scanBtn" onclick="startScan()">بدء الفحص</button></div>
+<div class="progress"><span id="bar"></span></div><p id="message" class="muted">بانتظار بدء الفحص</p>
+</section>
+<section class="panel"><h3>محولات الشبكة</h3><div id="adapters" class="muted">تحميل...</div></section>
+<section class="panel"><h3>الأجهزة المكتشفة</h3><div id="devices" class="muted">لا توجد نتائج بعد</div></section>
+<section class="panel"><h3>التقارير المحفوظة</h3><div id="reports" class="muted">تحميل...</div></section>
+<p class="muted">تنبيه: ظهور منفذ أو خدمة لا يثبت وجود ثغرة. لا تنفذ المنصة تخمين كلمات المرور أو تجاوز المصادقة أو فتح بث خاص.</p>
+</main>
+<script>
+const el=id=>document.getElementById(id);
+async function api(path,opts={}){const r=await fetch(path,opts);const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}
+async function loadAdapters(){
+ const data=await api('/api/adapters');el('adapterCount').textContent=data.length;el('adapters').innerHTML='';
+ data.forEach(a=>{const d=document.createElement('div');d.className='device';const ips=a.ipv4.map(x=>x.address).join('، ')||'لا يوجد IPv4';d.textContent=`${a.name} — ${ips} — ${a.is_up?'نشط':'متوقف'} — MTU ${a.mtu??'؟'}`;el('adapters').append(d)})
+}
+function showDevices(data){
+ el('count').textContent=data.devices_found||0;el('devices').innerHTML='';
+ if(!data.devices?.length){el('devices').textContent='لم يتم العثور على أجهزة تستجيب للمنافذ المحددة';return}
+ data.devices.forEach(d=>{
+  const box=document.createElement('div');box.className='device';
+  const h=document.createElement('strong');h.textContent=`${d.ip} — ${d.type}`;
+  const tag=document.createElement('span');tag.className='tag';tag.textContent=` ${d.port_count||d.ports.length} منافذ`;
+  const p=document.createElement('p');p.className='muted';p.textContent=d.ports.map(x=>`${x.port} / ${x.service}`).join(' · ');
+  const findings=document.createElement('pre');findings.textContent=(d.findings||[]).map(x=>`[${x.severity}] ${x.title}: ${x.detail}`).join('\n')||'لا توجد ملاحظات آلية';
+  box.append(h,tag,p,findings);el('devices').append(box)
+ })
+}
+async function loadReports(){
+ const data=await api('/api/reports');el('reports').innerHTML='';
+ if(!data.length){el('reports').textContent='لا توجد تقارير محفوظة';return}
+ data.forEach(x=>{const d=document.createElement('div');d.className='device';const a=document.createElement('a');a.href='/api/reports/'+encodeURIComponent(x.filename);a.target='_blank';a.textContent=x.filename;d.append(a,document.createTextNode(` — ${x.size} bytes`));el('reports').append(d)})
+}
+async function poll(){
+ try{
+  const s=await api('/api/status');el('statusText').textContent=s.status;
+  const pct=s.total?Math.round(s.progress/s.total*100):0;el('progressText').textContent=pct+'%';el('bar').style.width=pct+'%';el('message').textContent=s.status+(s.error?' — '+s.error:'');
+  el('scanBtn').disabled=s.running;
+  if(!s.running&&s.result){showDevices(s.result);loadReports()}
+  if(s.running)setTimeout(poll,1000)
+ }catch(e){el('message').textContent=e.message}
+}
+async function startScan(){
+ el('scanBtn').disabled=true;el('message').textContent='جارٍ بدء الفحص...';
+ try{await api('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({network:el('network').value.trim()})});poll()}
+ catch(e){el('message').textContent=e.message;el('scanBtn').disabled=false}
+}
+loadAdapters().catch(e=>el('adapters').textContent=e.message);loadReports().catch(e=>el('reports').textContent=e.message);poll();
+</script>
+</body></html>
